@@ -1,4 +1,4 @@
-import java.io.*;
+import java.io.*; 
 import java.net.*;
 import java.util.Scanner;
 
@@ -14,7 +14,7 @@ public class Node {
     }
 
     public PeerList getPeerList() {
-        return peerList; // Add getter to access peerList from static main
+        return peerList; // Accessor for main
     }
 
     public void startServer() throws IOException {
@@ -32,11 +32,24 @@ public class Node {
                     Socket socket = server.accept();
                     String remote = socket.getRemoteSocketAddress().toString();
                     System.out.println("[" + username + "] Incoming connection from " + remote);
-                    // create handler
+
+                    // Read peer's username and listening port
+                    BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                    String peerUsername = in.readLine();
+                    int peerListeningPort = Integer.parseInt(in.readLine());
+
+                    // Send own username and port back to peer
+                    PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+                    out.println(username);
+                    out.println(port);
+
+                    // Start message handler
                     MessageHandler handler = new MessageHandler(socket, peerList, username);
                     handler.start();
-                    // register writer for sending
-                    peerList.addPeer(socket);
+
+                    // Add to peerList with friendly info
+                    peerList.addPeer(socket, peerUsername, peerListeningPort);
+
                 } catch (IOException e) {
                     System.out.println("[" + username + "] Server socket closed or error: " + e.getMessage());
                     break;
@@ -52,11 +65,24 @@ public class Node {
             Socket socket = new Socket();
             socket.connect(new InetSocketAddress(ip, peerPort), 3000);
             System.out.println("[" + username + "] Connected to " + ip + ":" + peerPort);
-            // start receiver for this socket
+
+            // Send own username and listening port to the peer
+            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+            out.println(username);
+            out.println(port);
+
+            // Read peer's username and listening port
+            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            String peerUsername = in.readLine();
+            int peerListeningPort = Integer.parseInt(in.readLine());
+
+            // Start message handler
             MessageHandler handler = new MessageHandler(socket, peerList, username);
             handler.start();
-            // register writer
-            peerList.addPeer(socket);
+
+            // Register peer in peerList
+            peerList.addPeer(socket, peerUsername, peerListeningPort);
+
         } catch (IOException e) {
             System.out.println("[" + username + "] Failed to connect to " + ip + ":" + peerPort + " -> " + e.getMessage());
         }
@@ -101,12 +127,12 @@ public class Node {
                 }
                 node.connectToPeer(parts[1], Integer.parseInt(parts[2]));
             } else if (line.equals("/peers")) {
-                node.getPeerList().printPeers();  // ✅ fixed
+                node.getPeerList().printPeers();
             } else if (line.equals("/history")) {
                 node.printHistoryFile();
             } else if (line.equals("/quit")) {
                 System.out.println("Shutting down...");
-                node.getPeerList().closeAll();    // ✅ fixed
+                node.getPeerList().closeAll();
                 break;
             } else {
                 node.broadcast(line);
@@ -115,4 +141,3 @@ public class Node {
         sc.close();
     }
 }
-

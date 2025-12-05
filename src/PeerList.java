@@ -3,57 +3,81 @@ import java.net.*;
 import java.util.*;
 
 public class PeerList {
-    private final List<Socket> sockets = Collections.synchronizedList(new ArrayList<>());
 
-    public void addPeer(Socket s) {
-        sockets.add(s);
-    }
+    // Store each peer with its socket, username, and listening port
+    private static class PeerInfo {
+        Socket socket;
+        String username;
+        int listeningPort;
 
-    public void removePeer(Socket s) {
-        try {
-            sockets.remove(s);
-            s.close();
-        } catch (IOException e) {
-            // ignore
+        PeerInfo(Socket socket, String username, int listeningPort) {
+            this.socket = socket;
+            this.username = username;
+            this.listeningPort = listeningPort;
         }
     }
 
-    public void broadcast(String message) {
-        synchronized (sockets) {
-            Iterator<Socket> it = sockets.iterator();
+    private final List<PeerInfo> peers = Collections.synchronizedList(new ArrayList<>());
+
+    // Add peer with username and listening port
+    public void addPeer(Socket s, String username, int listeningPort) {
+        peers.add(new PeerInfo(s, username, listeningPort));
+    }
+
+    // Remove peer
+    public void removePeer(Socket s) {
+        synchronized (peers) {
+            Iterator<PeerInfo> it = peers.iterator();
             while (it.hasNext()) {
-                Socket s = it.next();
+                PeerInfo p = it.next();
+                if (p.socket.equals(s)) {
+                    try { s.close(); } catch (IOException e) {}
+                    it.remove();
+                    break;
+                }
+            }
+        }
+    }
+
+    // Broadcast message to all peers
+    public void broadcast(String message) {
+        synchronized (peers) {
+            Iterator<PeerInfo> it = peers.iterator();
+            while (it.hasNext()) {
+                PeerInfo p = it.next();
                 try {
-                    PrintWriter out = new PrintWriter(s.getOutputStream(), true);
+                    PrintWriter out = new PrintWriter(p.socket.getOutputStream(), true);
                     out.println(message);
                 } catch (IOException e) {
-                    System.out.println("[PeerList] Removing unreachable peer: " + s.getRemoteSocketAddress());
-                    try { s.close(); } catch (IOException ex) {}
+                    System.out.println("[PeerList] Removing unreachable peer: " + p.username + ":" + p.listeningPort);
+                    try { p.socket.close(); } catch (IOException ex) {}
                     it.remove();
                 }
             }
         }
     }
 
+    // Print friendly peer list
     public void printPeers() {
-        synchronized (sockets) {
-            if (sockets.isEmpty()) {
+        synchronized (peers) {
+            if (peers.isEmpty()) {
                 System.out.println("No connected peers.");
                 return;
             }
             System.out.println("Connected peers:");
-            for (Socket s : sockets) {
-                System.out.println(" - " + s.getRemoteSocketAddress());
+            for (PeerInfo p : peers) {
+                System.out.println(" - " + p.username + ":" + p.listeningPort);
             }
         }
     }
 
+    // Close all sockets
     public void closeAll() {
-        synchronized (sockets) {
-            for (Socket s : sockets) {
-                try { s.close(); } catch (IOException e) {}
+        synchronized (peers) {
+            for (PeerInfo p : peers) {
+                try { p.socket.close(); } catch (IOException e) {}
             }
-            sockets.clear();
+            peers.clear();
         }
     }
 }
